@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 /* ─────────────────────────────────────────────────
    Neural Network Canvas Utility
@@ -60,15 +60,29 @@ function initNeuralNetwork(canvas, nodeCount = 38) {
 }
 
 /* ── Hero partner orbit ──
-   Three rings grouped by what each brand does — endpoints closest to the
-   core (fastest orbit), then network, then security & cloud furthest out.
-   Planets carry brand colour only; everything else in the hero stays
-   monochrome so the nine brand hues don't fight each other. */
-const ORBIT_RINGS = {
-    1: { label: 'Endpoints',        size: .46, dur: 34 },
-    2: { label: 'Network',          size: .70, dur: 52 },
-    3: { label: 'Security & cloud', size: .96, dur: 76 },
-};
+   The projection lives in JS, not in CSS 3D transforms: every frame, each
+   orbiting element's angle becomes a screen position through one project()
+   function, and the SVG orbit rings are drawn through that same function —
+   so rings, planets and satellite chips can never disagree. Endpoints sit
+   closest to the core (fastest orbit), then network, then security & cloud;
+   six solution chips float on a slower outer orbit turning the other way. */
+const ORBIT_RINGS = [
+    { label: 'Endpoints',        r: .40, period: 38 },
+    { label: 'Network',          r: .64, period: 60 },
+    { label: 'Security & cloud', r: .86, period: 88 },
+    { label: 'Solutions',        r: 1.0, period: 130, dir: -1, dash: true },
+];
+
+const ORBIT_SAT_RING = 3;
+
+const ORBIT_SATELLITES = [
+    { label: 'Cloud security',    phase: .00, href: '/cloud-security-services' },
+    { label: 'IT infrastructure', phase: .17, href: '/infrastructure' },
+    { label: 'Device & MDM',      phase: .34, href: '/mdm' },
+    { label: 'Network security',  phase: .50, href: '/network-security' },
+    { label: 'Consultancy',       phase: .67, href: '/consultancy' },
+    { label: 'Gifting',           phase: .84, href: '/gifting' },
+];
 
 const ORBIT_STARS = Array.from({ length: 90 }, () => ({
     left: Math.random() * 100,
@@ -93,16 +107,34 @@ const ORBIT_MARKS = {
 };
 
 const ORBIT_PARTNERS = [
-    { name: 'Apple',     mark: 'apple',     brand: '#B8BEC2', ink: '#07080A', ring: 1, phase: .00, d: 78, fit: '42%', href: '/device-deployment-and-mdm' },
-    { name: 'Dell',      mark: 'dell',      brand: '#007DB8', ink: '#FFFFFF', ring: 1, phase: .25, d: 88, fit: '56%', href: '/it-infrastructure-solutions' },
-    { name: 'Lenovo',    mark: 'lenovo',    brand: '#E2231A', ink: '#FFFFFF', ring: 1, phase: .50, d: 90, fit: '66%', href: '/it-infrastructure-solutions' },
-    { name: 'HP',        mark: 'hp',        brand: '#0096D6', ink: '#FFFFFF', ring: 1, phase: .75, d: 80, fit: '56%', href: '/it-infrastructure-solutions' },
-    { name: 'Cisco',     mark: 'cisco',     brand: '#1BA0D7', ink: '#FFFFFF', ring: 2, phase: .12, d: 92, fit: '62%', href: '/network-security-services' },
-    { name: 'Juniper',   mark: 'juniper',   brand: '#84B135', ink: '#07080A', ring: 2, phase: .62, d: 92, fit: '70%', href: '/network-security-services' },
-    { name: 'Fortinet',  mark: 'fortinet',  brand: '#EE3124', ink: '#FFFFFF', ring: 3, phase: .06, d: 85, fit: '56%', href: '/network-security-services' },
-    { name: 'Sophos',    mark: null,        brand: '#1B9DD9', ink: '#FFFFFF', ring: 3, phase: .40, d: 85, word: 'SOPHOS', href: '/cloud-security-services' },
-    { name: 'Microsoft', mark: 'microsoft', brand: '#3A4149', ink: '#FFFFFF', ring: 3, phase: .73, d: 88, fit: '46%', href: '/cloud-security-services' },
+    { name: 'Apple',     mark: 'apple',     brand: '#B8BEC2', ink: '#07080A', ring: 0, phase: .00, k: .92,  fit: '42%' },
+    { name: 'Dell',      mark: 'dell',      brand: '#007DB8', ink: '#FFFFFF', ring: 0, phase: .25, k: 1.04, fit: '56%' },
+    { name: 'Lenovo',    mark: 'lenovo',    brand: '#E2231A', ink: '#FFFFFF', ring: 0, phase: .50, k: 1.06, fit: '66%' },
+    { name: 'HP',        mark: 'hp',        brand: '#0096D6', ink: '#FFFFFF', ring: 0, phase: .75, k: .95,  fit: '56%' },
+    { name: 'Cisco',     mark: 'cisco',     brand: '#1BA0D7', ink: '#FFFFFF', ring: 1, phase: .12, k: 1.08, fit: '62%' },
+    { name: 'Juniper',   mark: 'juniper',   brand: '#84B135', ink: '#07080A', ring: 1, phase: .62, k: 1.08, fit: '70%' },
+    { name: 'Fortinet',  mark: 'fortinet',  brand: '#EE3124', ink: '#FFFFFF', ring: 2, phase: .06, k: 1.00, fit: '56%' },
+    { name: 'Sophos',    mark: null,        brand: '#1B9DD9', ink: '#FFFFFF', ring: 2, phase: .40, k: 1.00, word: 'SOPHOS' },
+    { name: 'Microsoft', mark: 'microsoft', brand: '#3A4149', ink: '#FFFFFF', ring: 2, phase: .73, k: 1.04, fit: '46%' },
 ];
+
+const ORBIT_CFG = {
+    tilt: 62, tiltMin: 16, tiltMax: 82,      // degrees from top-down; 0 = flat circle, 90 = edge on
+    persp: 3.4,                              // camera distance as a multiple of the outer radius
+    sunK: .46,                               // sun diameter as a fraction of the outer radius
+    planetK: .145, planetMin: 32, planetMax: 92,
+    pad: 20,                                 // breathing room at the top/right edges, px
+    padBottom: 104,                          // room kept clear for the scroll cue and legend, px
+    overlap: 150,                            // how far the system may tuck behind the copy scrim, px
+    bleed: 0,                                // px the outer orbit may run past the right edge
+    dragSpin: .0075,                         // radians of spin per px dragged horizontally
+    dragTilt: .12,                           // degrees of tilt per px dragged vertically
+    friction: .94,                           // inertia decay per frame
+    scrollSpin: .0022,                       // radians of spin per px of page scroll
+    chipRoom: 78,                            // px reserved either side for the satellite chips
+    chipMinS: .88, chipMaxS: 1.12,           // chips never shrink past this — text must stay legible
+    bob: 4,                                  // px of vertical float on each chip
+};
 
 const Home = () => {
 
@@ -112,46 +144,372 @@ const Home = () => {
     const aboutCanvasRef    = useRef(null);
     const whyCanvasRef      = useRef(null);
 
-    const orbitHeroRef   = useRef(null);
-    const orbitSystemRef = useRef(null);
-    const orbitInnerRef  = useRef(null);
+    const orbitHeroRef    = useRef(null);
+    const orbitCopyRef    = useRef(null);
+    const orbitStageRef   = useRef(null);
+    const orbitSvgRef     = useRef(null);
+    const orbitLegendRef  = useRef(null);
+    const orbitCueRef     = useRef(null);
+    const navigate = useNavigate();
 
-    /* Pause the orbit for a hidden tab */
+    /* ── Partner orbit engine ──
+       Imperative by design: every planet, satellite and orbit ring is driven
+       from one requestAnimationFrame loop through a single project() call,
+       so nothing can drift out of sync the way independent CSS animations
+       eventually would. Built once on mount, torn down on unmount. */
     useEffect(() => {
-        const onVisibility = () => {
-            orbitSystemRef.current?.classList.toggle('is-paused', document.hidden);
+        const hero  = orbitHeroRef.current;
+        const copy  = orbitCopyRef.current;
+        const stage = orbitStageRef.current;
+        const svg   = orbitSvgRef.current;
+        const legend = orbitLegendRef.current;
+        const cue   = orbitCueRef.current;
+        if (!hero || !copy || !stage || !svg) return;
+
+        const TAU = Math.PI * 2;
+        const DEG = Math.PI / 180;
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const CFG = ORBIT_CFG;
+        const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        let W = 0, H = 0, cx = 0, cy = 0, R = 0;
+        let spin = 0, vSpin = 0, tilt = CFG.tilt, scrollSpin = 0;
+        let time = 0, last = 0, paused = false, destroyed = false;
+        let rafId = null;
+
+        const created = []; // every DOM node this effect appends, for cleanup
+
+        const ringPaths = ORBIT_RINGS.map((ring) => {
+            const p = document.createElementNS(SVG_NS, 'path');
+            if (ring.dash) p.setAttribute('stroke-dasharray', '3 7');
+            svg.appendChild(p);
+            created.push(p);
+            return p;
+        });
+
+        if (legend) {
+            ORBIT_RINGS.forEach((ring) => {
+                const row = document.createElement('div');
+                row.className = 'orbit-legend__row';
+                row.innerHTML = `<span class="orbit-legend__dash${ring.dash ? ' is-dashed' : ''}"></span>`;
+                row.appendChild(document.createTextNode(ring.label));
+                legend.appendChild(row);
+                created.push(row);
+            });
+        }
+
+        const pauseOn = (el) => {
+            const on  = () => { paused = true; };
+            const off = () => { paused = false; };
+            el.addEventListener('pointerenter', on);
+            el.addEventListener('pointerleave', off);
+            el.addEventListener('focus', on);
+            el.addEventListener('blur', off);
+            return () => {
+                el.removeEventListener('pointerenter', on);
+                el.removeEventListener('pointerleave', off);
+                el.removeEventListener('focus', on);
+                el.removeEventListener('blur', off);
+            };
         };
+        const teardownFns = [];
+
+        const nodes = ORBIT_PARTNERS.map((p) => {
+            const a = document.createElement('a');
+            a.className = 'orbit-planet';
+            a.href = '#';
+            a.style.setProperty('--brand', p.brand);
+            a.style.setProperty('--mark', p.ink);
+            if (p.fit) a.style.setProperty('--fit', p.fit);
+            a.setAttribute('aria-label', `${p.name} — ${ORBIT_RINGS[p.ring].label.toLowerCase()}`);
+
+            if (p.mark && ORBIT_MARKS[p.mark]) {
+                const markSvg = document.createElementNS(SVG_NS, 'svg');
+                markSvg.setAttribute('viewBox', '0 0 24 24');
+                markSvg.setAttribute('aria-hidden', 'true');
+                const path = document.createElementNS(SVG_NS, 'path');
+                path.setAttribute('d', ORBIT_MARKS[p.mark]);
+                markSvg.appendChild(path);
+                a.appendChild(markSvg);
+            } else {
+                const word = document.createElement('span');
+                word.className = 'orbit-wordmark';
+                word.textContent = p.word || p.name;
+                a.appendChild(word);
+            }
+
+            const name = document.createElement('span');
+            name.className = 'orbit-planet__name';
+            name.textContent = p.name;
+            a.appendChild(name);
+
+            teardownFns.push(pauseOn(a));
+            stage.appendChild(a);
+            created.push(a);
+            return a;
+        });
+
+        const sats = ORBIT_SATELLITES.map((sat) => {
+            const a = document.createElement('a');
+            a.className = 'orbit-sat';
+            a.href = sat.href;
+            a.textContent = sat.label;
+            teardownFns.push(pauseOn(a));
+            stage.appendChild(a);
+            created.push(a);
+            return a;
+        });
+
+        function syncHeroHeight() {
+            const navEl = document.querySelector('.navbar-container');
+            const navH = navEl ? navEl.getBoundingClientRect().height : 0;
+            if (window.innerWidth >= 1000) {
+                // the navbar sits in normal flow (not fixed), so a plain 100svh
+                // hero runs that much past the bottom of the fold — pull it
+                // back in so the bottom-anchored legend/cue stay visible
+                hero.style.minHeight = `calc(100svh - ${navH}px)`;
+            } else {
+                // on narrow screens the system sits *below* the copy rather
+                // than beside it, so the hero needs to grow past 100svh to
+                // give it room — a fixed viewport-height cap here would
+                // force the orbit down to its size floor and into the copy
+                const copyH = copy.getBoundingClientRect().height;
+                hero.style.minHeight = `${Math.round(copyH + 520)}px`;
+            }
+        }
+
+        function measure() {
+            syncHeroHeight();
+            const rect = hero.getBoundingClientRect();
+            W = rect.width; H = rect.height;
+
+            const cosT = Math.cos(tilt * DEG);
+            const sinT = Math.sin(tilt * DEG);
+            const grow = CFG.persp / (CFG.persp - sinT);
+            const bite = CFG.planetK / 2 * grow;
+
+            const wide = W >= 1000;
+            const copyRect = copy.getBoundingClientRect();
+            let left, right, top, bottom;
+
+            if (wide) {
+                left   = (copyRect.right - rect.left) - CFG.overlap;
+                right  = W - CFG.pad + CFG.bleed;
+                top    = CFG.pad;
+                bottom = H - CFG.padBottom;
+            } else {
+                left   = CFG.pad;
+                right  = W - CFG.pad;
+                top    = (copyRect.bottom - rect.top) - 24;
+                bottom = H - CFG.padBottom;
+            }
+
+            cx = (left + right) / 2;
+            cy = (top + bottom) / 2;
+
+            const halfW = (right - left) / 2;
+            const halfH = (bottom - top) / 2;
+
+            R = Math.max(120, Math.min(
+                (halfW - CFG.chipRoom) / (grow + bite),
+                (halfH - 16) / (grow * cosT + bite)
+            ));
+
+            stage.style.setProperty('--cx', cx.toFixed(1) + 'px');
+            stage.style.setProperty('--cy', cy.toFixed(1) + 'px');
+            stage.style.setProperty('--sun', Math.round(R * CFG.sunK) + 'px');
+
+            nodes.forEach((el, i) => {
+                const d = Math.round(
+                    Math.min(CFG.planetMax, Math.max(CFG.planetMin, R * CFG.planetK * ORBIT_PARTNERS[i].k))
+                );
+                el.style.setProperty('--d', d + 'px');
+            });
+
+            drawOrbits();
+        }
+
+        function project(angle, radius) {
+            const cosT = Math.cos(tilt * DEG);
+            const sinT = Math.sin(tilt * DEG);
+            const px = Math.cos(angle) * radius;
+            const pz = Math.sin(angle) * radius;
+            const z  = pz * sinT;
+            const s  = CFG.persp * R / (CFG.persp * R - z);
+            return { x: px * s, y: pz * cosT * s, s, z };
+        }
+
+        function drawOrbits() {
+            const STEPS = 120;
+            ringPaths.forEach((path, i) => {
+                const radius = R * ORBIT_RINGS[i].r;
+                let d = '';
+                for (let j = 0; j <= STEPS; j++) {
+                    const pt = project((j / STEPS) * TAU, radius);
+                    d += (j ? 'L' : 'M') + (cx + pt.x).toFixed(1) + ' ' + (cy + pt.y).toFixed(1);
+                }
+                path.setAttribute('d', d + 'Z');
+            });
+        }
+
+        function frame(now) {
+            if (destroyed) return;
+            const dt = last ? Math.min((now - last) / 1000, .05) : 0;
+            last = now;
+
+            if (!paused && !still) time += dt;
+
+            if (Math.abs(vSpin) > 1e-5) {
+                spin += vSpin;
+                vSpin *= CFG.friction;
+                if (Math.abs(vSpin) <= 1e-5) vSpin = 0;
+            }
+
+            const zMax = R * Math.sin(tilt * DEG) || 1;
+
+            for (let i = 0; i < nodes.length; i++) {
+                const p = ORBIT_PARTNERS[i];
+                const ring = ORBIT_RINGS[p.ring];
+                const angle = (time / ring.period) * TAU + p.phase * TAU + spin + scrollSpin;
+                const pt = project(angle, R * ring.r);
+                nodes[i].style.transform = `translate3d(${pt.x.toFixed(1)}px,${pt.y.toFixed(1)}px,0) scale(${pt.s.toFixed(3)})`;
+                nodes[i].style.opacity = (.52 + .48 * ((pt.z / zMax) + 1) / 2).toFixed(3);
+                nodes[i].style.zIndex = String(100 + Math.round(pt.z));
+            }
+
+            const satRing = ORBIT_RINGS[ORBIT_SAT_RING];
+            for (let i = 0; i < sats.length; i++) {
+                const sat = ORBIT_SATELLITES[i];
+                const angle = (time / satRing.period) * TAU * (satRing.dir || 1) + sat.phase * TAU + spin + scrollSpin;
+                const pt = project(angle, R * satRing.r);
+                const s2 = Math.min(CFG.chipMaxS, Math.max(CFG.chipMinS, pt.s));
+                const bob = still ? 0 : Math.sin(time * .8 + i * 1.7) * CFG.bob;
+                sats[i].style.transform = `translate3d(${pt.x.toFixed(1)}px,${(pt.y + bob).toFixed(1)}px,0) scale(${s2.toFixed(3)})`;
+                sats[i].style.opacity = (.45 + .55 * ((pt.z / zMax) + 1) / 2).toFixed(3);
+                sats[i].style.zIndex = String(100 + Math.round(pt.z));
+            }
+
+            rafId = requestAnimationFrame(frame);
+        }
+
+        /* drag: horizontal spins (with inertia), vertical tilts the plane
+           (mouse only — touch keeps vertical drag as page scroll) */
+        let dragging = false, moved = 0, lastX = 0, lastY = 0, touch = false;
+
+        const onPointerDown = (e) => {
+            dragging = true;
+            moved = 0;
+            touch = e.pointerType === 'touch';
+            lastX = e.clientX; lastY = e.clientY;
+            vSpin = 0;
+            stage.classList.add('is-dragging');
+            stage.setPointerCapture(e.pointerId);
+        };
+        const onPointerMove = (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - lastX;
+            const dy = e.clientY - lastY;
+            lastX = e.clientX; lastY = e.clientY;
+            moved += Math.abs(dx) + Math.abs(dy);
+
+            const d = dx * CFG.dragSpin;
+            spin += d;
+            vSpin = d;
+
+            if (!touch && Math.abs(dy) > 0) {
+                tilt = Math.min(CFG.tiltMax, Math.max(CFG.tiltMin, tilt + dy * CFG.dragTilt));
+                measure();
+            }
+        };
+        const endDrag = (e) => {
+            if (!dragging) return;
+            dragging = false;
+            stage.classList.remove('is-dragging');
+            if (e && e.pointerId != null && stage.hasPointerCapture(e.pointerId)) {
+                stage.releasePointerCapture(e.pointerId);
+            }
+        };
+        const onClickCapture = (e) => {
+            if (moved > 6) { e.preventDefault(); e.stopPropagation(); return; }
+            const satEl = e.target.closest('.orbit-sat');
+            if (satEl) {
+                e.preventDefault();
+                navigate(satEl.getAttribute('href'));
+                return;
+            }
+            if (e.target.closest('.orbit-planet')) e.preventDefault();
+        };
+        const onKeyDown = (e) => {
+            const step = .12;
+            if (e.key === 'ArrowLeft')  { spin -= step; e.preventDefault(); }
+            if (e.key === 'ArrowRight') { spin += step; e.preventDefault(); }
+            if (e.key === 'ArrowUp')    { tilt = Math.max(CFG.tiltMin, tilt - 3); measure(); e.preventDefault(); }
+            if (e.key === 'ArrowDown')  { tilt = Math.min(CFG.tiltMax, tilt + 3); measure(); e.preventDefault(); }
+        };
+
+        stage.addEventListener('pointerdown', onPointerDown);
+        stage.addEventListener('pointermove', onPointerMove);
+        stage.addEventListener('pointerup', endDrag);
+        stage.addEventListener('pointercancel', endDrag);
+        stage.addEventListener('click', onClickCapture, true);
+        stage.addEventListener('keydown', onKeyDown);
+
+        /* scroll: the system keeps turning as the page moves, and the cue
+           fades once the visitor has actually started scrolling */
+        let ticking = false;
+        const onScroll = () => {
+            if (ticking) return;
+            ticking = true;
+            requestAnimationFrame(() => {
+                const y = window.scrollY || 0;
+                scrollSpin = still ? 0 : y * CFG.scrollSpin;
+                cue?.classList.toggle('is-hidden', y > 40);
+                ticking = false;
+            });
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+
+        const onCueClick = () => {
+            hero.nextElementSibling?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+        };
+        cue?.addEventListener('click', onCueClick);
+
+        let resizeTimer;
+        const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(measure, 120); };
+        window.addEventListener('resize', onResize);
+
+        const onVisibility = () => { paused = document.hidden; };
         document.addEventListener('visibilitychange', onVisibility);
-        return () => document.removeEventListener('visibilitychange', onVisibility);
-    }, []);
 
-    /* Pointer parallax — the orbit tips subtly toward the cursor */
-    useEffect(() => {
-        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const hoverCapable = window.matchMedia('(hover: hover)').matches;
-        if (reduced || !hoverCapable) return;
-        const heroEl = orbitHeroRef.current;
-        const inner  = orbitInnerRef.current;
-        if (!heroEl || !inner) return;
+        // the copy column's height can shift after mount — web fonts
+        // swapping in, or (on narrow screens) the stage sitting below it —
+        // so re-fit whenever its box actually changes, not just on resize
+        const copyObserver = new ResizeObserver(() => measure());
+        copyObserver.observe(copy);
 
-        const onMove = (e) => {
-            const rect = heroEl.getBoundingClientRect();
-            const x = (e.clientX - rect.left) / rect.width  - 0.5;
-            const y = (e.clientY - rect.top)  / rect.height - 0.5;
-            inner.style.setProperty('--tilt-x', `${(64 + y * 12).toFixed(2)}deg`);
-            inner.style.setProperty('--tilt-z', `${(x * -14).toFixed(2)}deg`);
-        };
-        const onLeave = () => {
-            inner.style.removeProperty('--tilt-x');
-            inner.style.removeProperty('--tilt-z');
-        };
-        heroEl.addEventListener('pointermove', onMove);
-        heroEl.addEventListener('pointerleave', onLeave);
+        measure();
+        rafId = requestAnimationFrame(frame);
+
         return () => {
-            heroEl.removeEventListener('pointermove', onMove);
-            heroEl.removeEventListener('pointerleave', onLeave);
+            destroyed = true;
+            if (rafId) cancelAnimationFrame(rafId);
+            clearTimeout(resizeTimer);
+            copyObserver.disconnect();
+            stage.removeEventListener('pointerdown', onPointerDown);
+            stage.removeEventListener('pointermove', onPointerMove);
+            stage.removeEventListener('pointerup', endDrag);
+            stage.removeEventListener('pointercancel', endDrag);
+            stage.removeEventListener('click', onClickCapture, true);
+            stage.removeEventListener('keydown', onKeyDown);
+            window.removeEventListener('scroll', onScroll);
+            window.removeEventListener('resize', onResize);
+            document.removeEventListener('visibilitychange', onVisibility);
+            cue?.removeEventListener('click', onCueClick);
+            teardownFns.forEach((fn) => fn());
+            created.forEach((el) => el.remove());
         };
-    }, []);
+    }, [navigate]);
 
     /* Neural networks */
     useEffect(() => {
@@ -296,51 +654,22 @@ const Home = () => {
                     ))}
                 </div>
 
-                <div className="orbit-system" ref={orbitSystemRef}>
-                    <div className="orbit-system__inner" ref={orbitInnerRef}>
-                        <div className="orbit-sun" aria-hidden="true">
-                            <span className="orbit-sun__corona"></span>
-                            <span className="orbit-sun__core"></span>
-                        </div>
-
-                        {Object.entries(ORBIT_RINGS).map(([id, r]) => (
-                            <div key={id} className={`orbit-ring orbit-ring--${id}`} style={{ '--size': `calc(var(--orbit-base) * ${r.size})` }} aria-hidden="true">
-                                <span className="orbit-ring__label">{r.label}</span>
-                            </div>
-                        ))}
-
-                        {ORBIT_PARTNERS.map((p) => {
-                            const r = ORBIT_RINGS[p.ring];
-                            return (
-                                <div key={p.name} className="orbit-carrier" style={{
-                                    '--size': `calc(var(--orbit-base) * ${r.size})`,
-                                    '--dur': `${r.dur}s`,
-                                    '--delay': `${-(r.dur * p.phase).toFixed(2)}s`,
-                                }}>
-                                    <div className="orbit-slot">
-                                        <div className="orbit-billboard" style={{ '--d': `${p.d}px` }}>
-                                            <div className="orbit-facing">
-                                                <Link to={p.href} className="orbit-planet"
-                                                    style={{ '--brand': p.brand, '--mark': p.ink, '--fit': p.fit }}
-                                                    aria-label={`${p.name} — ${r.label.toLowerCase()}`}>
-                                                    {p.mark && ORBIT_MARKS[p.mark] ? (
-                                                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d={ORBIT_MARKS[p.mark]} /></svg>
-                                                    ) : (
-                                                        <span className="orbit-wordmark">{p.word || p.name}</span>
-                                                    )}
-                                                </Link>
-                                                <span className="orbit-caption">{p.name}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
+                {/* Planets, satellite chips and orbit-ring paths are built and
+                    positioned imperatively (see the orbit-engine effect above) —
+                    every frame comes from one project() call so nothing drifts
+                    out of sync the way independent CSS animations would. */}
+                <div className="orbit-stage" ref={orbitStageRef} tabIndex={0} role="group"
+                    aria-label="Partner system — drag to spin, arrow keys to rotate">
+                    <svg className="orbit-svg" ref={orbitSvgRef} aria-hidden="true"></svg>
+                    <div className="orbit-sun" aria-hidden="true">
+                        <span className="orbit-sun__corona"></span>
+                        <span className="orbit-sun__core"></span>
+                        <span className="orbit-sun__mark">StromexAI</span>
                     </div>
                 </div>
 
-                <div className="container mx-auto px-6 relative" style={{ zIndex:10 }}>
-                    <div className="orbit-copy">
+                <div className="container mx-auto px-6 relative" style={{ zIndex:200, pointerEvents:'none' }}>
+                    <div className="orbit-copy" ref={orbitCopyRef}>
                         <div style={{ display:'inline-flex', alignItems:'center', gap:'8px', padding:'5px 16px', borderRadius:'99px', background:'rgba(255,255,255,0.06)', border:'1px solid var(--line)', marginBottom:'24px' }}>
                             <span style={{ width:'6px', height:'6px', borderRadius:'50%', background:'var(--paper)', animation:'pulseDot 2s infinite' }}></span>
                             <span style={{ color:'var(--muted)', fontSize:'11px', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.12em', fontFamily:'DM Sans,sans-serif' }}>Trusted IT Partner 2025</span>
@@ -363,7 +692,7 @@ const Home = () => {
                             </Link>
                         </div>
 
-                        <p className="orbit-hint reveal">Hover a brand to hold its orbit · move the pointer to tip the system</p>
+                        <p className="orbit-hint reveal">Drag the system to spin it</p>
 
                         <div className="reveal" style={{ marginTop:'32px', display:'flex', alignItems:'center', gap:'28px', flexWrap:'wrap' }}>
                             {[
@@ -384,6 +713,14 @@ const Home = () => {
                         </div>
                     </div>
                 </div>
+
+                <div className="orbit-legend" ref={orbitLegendRef} aria-hidden="true"></div>
+
+                <button className="orbit-scroll-cue" ref={orbitCueRef} type="button">
+                    <span>Scroll</span>
+                    <span className="orbit-scroll-cue__track"><span className="orbit-scroll-cue__dot"></span></span>
+                </button>
+
                 <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'70px', background:'linear-gradient(to top,#021840,transparent)', zIndex:9 }}></div>
             </section>
 
