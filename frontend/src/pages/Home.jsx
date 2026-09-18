@@ -102,13 +102,13 @@ const Home = () => {
 
         words.forEach((w, i) => {
             const angle = (i / words.length) * Math.PI * 2 + Math.random() * 0.8;
-            const dist = 46 + Math.random() * 34;
+            const dist = 28 + Math.random() * 20;
             // anime.js's transform engine parses translateX/translateY/scale
             // as separate function tokens — the translate(x, y) shorthand
             // isn't recognized, so the words never actually animate back.
-            w.style.transform = `translateX(${Math.cos(angle) * dist}px) translateY(${Math.sin(angle) * dist}px) scale(1.7)`;
+            w.style.transform = `translateX(${Math.cos(angle) * dist}px) translateY(${Math.sin(angle) * dist}px) scale(1.35)`;
             w.style.opacity = '0';
-            w.style.filter = 'blur(10px)';
+            w.style.filter = 'blur(6px)';
         });
 
         if (window.anime) {
@@ -118,14 +118,14 @@ const Home = () => {
                 translateY: 0,
                 scale: 1,
                 opacity: [0, 1],
-                filter: ['blur(10px)', 'blur(0px)'],
-                easing: 'easeOutExpo',
-                duration: 1100,
-                delay: window.anime.stagger(90, { start: 150 }),
+                filter: ['blur(6px)', 'blur(0px)'],
+                easing: 'easeOutQuad',
+                duration: 520,
+                delay: window.anime.stagger(45, { start: 60 }),
             });
         } else {
             words.forEach((w) => {
-                w.style.transition = 'transform 900ms cubic-bezier(.16,1,.3,1), opacity 700ms ease, filter 900ms ease';
+                w.style.transition = 'transform 450ms cubic-bezier(.16,1,.3,1), opacity 350ms ease, filter 450ms ease';
                 w.style.transform = 'none';
                 w.style.opacity = '1';
                 w.style.filter = 'blur(0px)';
@@ -273,8 +273,10 @@ const Home = () => {
                     distance={24}
                     elevation={narrow ? -7 : -5.5}
                     fov={narrow ? 58 : 42}
-                    steps={narrow ? 200 : 300}
-                    resolution={narrow ? 0.6 : 0.7}
+                    steps={narrow ? 140 : 190}
+                    resolution={narrow ? 0.45 : 0.55}
+                    maxDpr={1.25}
+                    glow={0.75}
                     hotColor="#EAF4FF"
                     midColor="#38BDF8"
                     coolColor="#054494"
