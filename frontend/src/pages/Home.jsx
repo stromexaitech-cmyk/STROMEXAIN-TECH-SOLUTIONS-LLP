@@ -1,5 +1,19 @@
-import React, { useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { BlackHoleHeroSection } from '../components/ui/blackhole-hero-section';
+
+/** True while the viewport is narrow — mirrors the hero's own copy-vs-hole layout swap. */
+function useNarrowViewport(query = '(max-width: 767px)') {
+    const [narrow, setNarrow] = useState(false);
+    useEffect(() => {
+        const m = window.matchMedia(query);
+        const sync = () => setNarrow(m.matches);
+        sync();
+        m.addEventListener('change', sync);
+        return () => m.removeEventListener('change', sync);
+    }, [query]);
+    return narrow;
+}
 
 /* ─────────────────────────────────────────────────
    Neural Network Canvas Utility
@@ -59,457 +73,65 @@ function initNeuralNetwork(canvas, nodeCount = 38) {
     return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize); };
 }
 
-/* ── Hero partner orbit ──
-   The projection lives in JS, not in CSS 3D transforms: every frame, each
-   orbiting element's angle becomes a screen position through one project()
-   function, and the SVG orbit rings are drawn through that same function —
-   so rings, planets and satellite chips can never disagree. Endpoints sit
-   closest to the core (fastest orbit), then network, then security & cloud;
-   six solution chips float on a slower outer orbit turning the other way. */
-const ORBIT_RINGS = [
-    { label: 'Endpoints',        r: .40, period: 38 },
-    { label: 'Network',          r: .64, period: 60 },
-    { label: 'Security & cloud', r: .86, period: 88 },
-    { label: 'Solutions',        r: 1.0, period: 130, dir: -1, dash: true },
-];
-
-const ORBIT_SAT_RING = 3;
-
-const ORBIT_SATELLITES = [
-    { label: 'Cloud security',    phase: .00, href: '/cloud-security-services' },
-    { label: 'IT infrastructure', phase: .17, href: '/infrastructure' },
-    { label: 'Device & MDM',      phase: .34, href: '/mdm' },
-    { label: 'Network security',  phase: .50, href: '/network-security' },
-    { label: 'Consultancy',       phase: .67, href: '/consultancy' },
-    { label: 'Gifting',           phase: .84, href: '/gifting' },
-];
-
-const ORBIT_STARS = Array.from({ length: 90 }, () => ({
-    left: Math.random() * 100,
-    top: Math.random() * 100,
-    size: Math.random() < 0.85 ? 1 : 2,
-    delay: -Math.random() * 5,
-}));
-
-/* Brand marks, inlined as 24x24 SVG paths — no network requests, no CDN.
-   Sourced from the Simple Icons set (CC0); Microsoft's four-square is drawn
-   to spec. Replace any path with the official SVG from that partner's
-   portal when you have it. */
-const ORBIT_MARKS = {
-    apple: "M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701",
-    dell: "M17.963 14.6V9.324h1.222v4.204h2.14v1.07h-3.362zm-9.784-3.288l2.98-2.292c.281.228.56.458.841.687l-2.827 2.14.611.535 2.827-2.216c.281.228.56.458.841.688a295.83 295.83 0 0 1-2.827 2.216l.61.536 2.83-2.295-.001-1.986h1.223v4.204h2.216v1.07h-3.362v-1.987c-.995.763-1.987 1.529-2.981 2.292l-2.981-2.292c-.144.729-.653 1.36-1.312 1.694-.285.147-.597.24-.915.276-.183.022-.367.017-.551.017H3.516V9.325H5.69a2.544 2.544 0 0 1 1.563.557c.454.36.778.872.927 1.43m-3.516-.917v3.21l.953-.001a1.377 1.377 0 0 0 1.036-.523 1.74 1.74 0 0 0 .182-1.889 1.494 1.494 0 0 0-.976-.766c-.166-.04-.338-.03-.507-.032h-.688zM11.82 0h.337a11.94 11.94 0 0 1 5.405 1.373 12.101 12.101 0 0 1 4.126 3.557A11.93 11.93 0 0 1 24 11.82v.36a11.963 11.963 0 0 1-3.236 8.033A11.967 11.967 0 0 1 12.182 24h-.361a11.993 11.993 0 0 1-4.145-.806 12.04 12.04 0 0 1-4.274-2.836A12.057 12.057 0 0 1 .576 15.67 12.006 12.006 0 0 1 0 12.181v-.361a11.924 11.924 0 0 1 1.992-6.396 12.211 12.211 0 0 1 4.71-4.172A11.875 11.875 0 0 1 11.82 0m-.153 1.23a10.724 10.724 0 0 0-6.43 2.375 10.78 10.78 0 0 0-3.319 4.573 10.858 10.858 0 0 0 .193 8.12 10.788 10.788 0 0 0 3.546 4.421 10.698 10.698 0 0 0 4.786 1.946c1.456.209 2.955.124 4.376-.26a10.756 10.756 0 0 0 5.075-3.062 10.742 10.742 0 0 0 2.686-5.28 10.915 10.915 0 0 0-.122-4.682 10.77 10.77 0 0 0-7.098-7.626 10.78 10.78 0 0 0-3.693-.525z",
-    lenovo: "M21.044 12.288c0 .5-.343.867-.815.867-.464 0-.827-.38-.827-.867 0-.51.343-.868.815-.868.464 0 .827.381.827.868zm-14.305-.92a.787.787 0 0 0-.651.307.991.991 0 0 0-.172.738l1.479-.614a.708.708 0 0 0-.656-.43zm6.963.052c-.472 0-.816.358-.816.868 0 .486.364.867.828.867.472 0 .815-.368.815-.867 0-.487-.363-.868-.827-.868zM24 7.997v8.006H0V7.997h24zM5.01 13.05H3.088V9.825H2.23v4.003h2.78v-.777zm1.137-.094l2.163-.897a1.667 1.667 0 0 0-.37-.86c-.284-.33-.704-.505-1.216-.505-.931 0-1.633.686-1.633 1.593 0 .93.704 1.593 1.726 1.593.572 0 1.158-.272 1.432-.589l-.535-.411c-.357.264-.56.326-.885.326-.292 0-.52-.09-.682-.25zm5.57-1.039c0-.709-.507-1.223-1.252-1.223a1.28 1.28 0 0 0-1.005.494v-.442h-.846v3.081h.846v-1.753c0-.316.245-.651.698-.651.35 0 .712.243.712.651v1.753h.847v-1.91zm3.647.37c0-.904-.725-1.593-1.65-1.593-.933 0-1.663.7-1.663 1.593 0 .903.726 1.592 1.651 1.592.932 0 1.662-.7 1.662-1.592zm2.066 1.54l1.268-3.081h-.967l-.765 2.099-.765-2.1h-.966l1.268 3.081h.927zm4.449-1.54c0-.904-.725-1.593-1.65-1.593-.932 0-1.662.7-1.662 1.593 0 .903.725 1.592 1.65 1.592.932 0 1.662-.7 1.662-1.592z",
-    hp: "M12.0069 24h-.3572l2.459-6.7453h3.3796c.5907 0 1.2364-.4533 1.4424-1.0166l2.6652-7.3085c.4396-1.1952-.2473-2.1706-1.525-2.1706h-4.6983l-3.929 10.798-2.2255 6.127C3.929 22.434 0 17.6806 0 12.007 0 6.498 3.7092 1.8546 8.7647.4396L6.4705 6.759 2.6514 17.2547h2.5415L8.4488 8.339h1.9095l-3.2558 8.9158H9.644l3.0223-8.3251c.4396-1.1952-.2473-2.1706-1.525-2.1706h-2.143l2.459-6.7453C11.636 0 11.8145 0 11.9931 0 18.6285 0 24 5.3715 24 12.007c.0137 6.6216-5.3578 11.993-11.9931 11.993zM19.2742 8.325h-1.9096l-2.6789 7.336h1.9096l2.6789-7.336z",
-    cisco: "M16.331 18.171V17.06l-.022.01c-.25.121-.522.19-.801.203a1.186 1.186 0 01-.806-.237 1.038 1.038 0 01-.352-.498 1.21 1.21 0 01-.023-.667c.052-.225.178-.426.357-.569.16-.134.355-.218.562-.242a1.85 1.85 0 011.061.198l.024.013v-1.117l-.051-.014a2.862 2.862 0 00-1.011-.132 2.34 2.34 0 00-.903.206c-.287.132-.54.327-.739.571a2.221 2.221 0 00-.04 2.705c.295.378.709.645 1.175.756.491.12 1.006.102 1.487-.052l.082-.023M5.336 18.171V17.06l-.022.01c-.25.121-.522.19-.801.203a1.183 1.183 0 01-.806-.237 1.03 1.03 0 01-.351-.498 1.202 1.202 0 01-.024-.667c.052-.225.177-.426.357-.569.16-.134.355-.218.562-.242a1.85 1.85 0 011.061.198l.024.013v-1.117l-.051-.014a2.862 2.862 0 00-1.011-.132 2.344 2.344 0 00-.903.206 2.08 2.08 0 00-.74.571 2.224 2.224 0 00-.041 2.705 2.11 2.11 0 001.176.756c.491.12 1.005.102 1.487-.052l.083-.023M9.26 17.249l-.004.957.07.012c.22.041.441.069.664.085.195.019.391.022.587.012.187-.014.372-.049.551-.104.21-.06.405-.163.571-.305a1.16 1.16 0 00.333-.478 1.31 1.31 0 00-.007-.96 1.068 1.068 0 00-.298-.414 1.261 1.261 0 00-.438-.255l-.722-.268a.388.388 0 01-.197-.188.245.245 0 01.008-.219.382.382 0 01.154-.142.798.798 0 01.257-.074c.153-.022.308-.021.46.005.18.02.358.051.533.096l.038.008v-.883l-.069-.015a4.749 4.749 0 00-.543-.097 2.844 2.844 0 00-.714-.003c-.3.027-.585.143-.821.33-.16.126-.281.293-.351.484-.104.29-.105.608 0 .899.054.145.14.274.252.381.097.093.207.173.327.236.157.084.324.149.497.195.057.017.114.035.17.054l.085.031.024.01c.084.03.162.078.226.14.045.042.08.094.101.151a.325.325 0 01.001.161.339.339 0 01-.166.198.856.856 0 01-.275.086 2.032 2.032 0 01-.427.021 5.208 5.208 0 01-.557-.074 9.195 9.195 0 01-.287-.067l-.033-.006zm-2.475.995h1.05v-4.167h-1.05v4.167zm12.162-2.936a1.095 1.095 0 011.541.158 1.094 1.094 0 01-.157 1.541l-.017.014a1.096 1.096 0 01-1.367-1.713m-1.525.854a2.193 2.193 0 002.666 2.107 2.139 2.139 0 00.701-3.937 2.207 2.207 0 00-3.367 1.83M22.961 10.728a.52.52 0 001.039 0V9.573a.52.52 0 00-1.039 0v1.155M20.117 10.728a.522.522 0 001.041 0V8.139a.521.521 0 00-1.04 0v2.589M17.231 11.771a.521.521 0 001.039 0V6.17a.52.52 0 00-1.039 0v5.601M14.393 10.728a.521.521 0 001.04 0V8.139a.52.52 0 00-1.039 0v2.589M11.494 10.728a.522.522 0 001.039 0V9.573a.52.52 0 00-1.039 0v1.155M8.624 10.728a.52.52 0 001.039 0V8.139a.52.52 0 00-1.039 0v2.589M5.737 11.771a.52.52 0 001.039 0V6.17a.52.52 0 00-1.039 0v5.601M2.876 10.728a.522.522 0 001.04 0V8.139a.52.52 0 00-1.039 0v2.589M0 10.728a.521.521 0 001.039 0V9.573a.52.52 0 00-1.039 0v1.155",
-    juniper: "M23.0864 13.1643c.0456 0 .0717-.0132.0717-.062 0-.0482-.0254-.0593-.0731-.0593h-.1023v.1213zm-.1037.0417v.1285h-.0445v-.334h.1487c.0846 0 .1172.0347.1172.1006 0 .054-.0229.0912-.0806.102l.0755.1314h-.0484l-.0746-.1285zm.0746-.2918a.2535.2535 0 0 0-.2533.2531c0 .1395.1136.2532.2533.2532a.2535.2535 0 0 0 .253-.2532.2534.2534 0 0 0-.253-.2531zm-.291.2531a.2912.2912 0 0 1 .291-.2908.291.291 0 0 1 .2905.2908.291.291 0 0 1-.2905.2907.2912.2912 0 0 1-.291-.2907zm-20.7445-.6602V8.8304h-.4212v3.6767c0 .8506.0337 1.5332-1.4404 1.5332A4.029 4.029 0 0 1 0 14.0369v.397a6.215 6.215 0 0 0 .1602.0022c1.7858 0 1.8616-.8002 1.8616-1.929zm15.5404-1.6972h3.1334c-.042-.918-.1011-1.7014-1.4404-1.7014-1.2887 0-1.6425.6992-1.693 1.7014zm1.7016-2.0889c1.794 0 1.853 1.2045 1.8447 2.4764h-3.5548c.0085 1.1204.2863 1.9544 1.7436 1.9544.775 0 1.1288-.2107 1.5079-.4886l.2357.3116c-.421.3117-.918.556-1.7436.556-1.8194 0-2.1565-1.053-2.1565-2.4091 0-1.356.3877-2.4007 2.123-2.4007zm-4.1484 2.7055c.7439 0 1.1135-.3625 1.1135-1.0949 0-.7322-.3988-1.0798-1.132-1.0798h-1.7285v2.1747zM15.109 8.839c1.0678 0 1.5519.5307 1.5519 1.474 0 .9497-.478 1.527-1.5578 1.527h-1.7348v1.5981h-.4124V8.839zm-2.9253 0v4.5991h-.4122V8.839zm-1.1939 4.5991h-.4296v-2.8134c0-.8086.0084-1.491-1.474-1.491-1.4743 0-1.4405.6824-1.4405 1.5331v2.7713h-.4212v-2.7713c0-1.1288.076-1.9289 1.8616-1.9289 1.7943 0 1.9037.8001 1.9037 1.8952zM2.7466 8.8304h.4297v2.8134c0 .8088-.0084 1.491 1.474 1.491 1.4742 0 1.4405-.6822 1.4405-1.533V8.8303h.4212v2.7713c0 1.1289-.0759 1.929-1.8616 1.929-1.7943 0-1.9038-.8001-1.9038-1.8952zm18.9675 1.8364v2.7713h.421v-2.7713c0-.8507-.0336-1.533 1.4407-1.533.1579 0 .298.0083.4242.023v-.4012a4.8535 4.8535 0 0 0-.4242-.0177c-1.7859 0-1.8617.8001-1.8617 1.929zm-.4315 4.3602c.1525.096.3017.1286.4542.1286.2624 0 .3789-.0737.3789-.2486 0-.18-.1508-.2057-.3789-.2468-.2743-.048-.4594-.0944-.4594-.3514 0-.2453.1577-.3413.4594-.3413.199 0 .3412.0447.4423.1132l-.072.1097c-.0908-.06-.2263-.0995-.3703-.0995-.228 0-.3257.0636-.3257.2144 0 .1612.132.192.3584.233.2776.0499.4782.091.4782.3635 0 .2521-.1612.3737-.5074.3737-.192 0-.3652-.0393-.5263-.1456zm-.7886-.4423l-.2538.2777v.396h-.132v-1.2703h.132v.7012l.643-.7012h.156l-.456.4989.5176.7715h-.1525l-.4543-.6738m-1.1006.0326c.18 0 .2914-.0549.2914-.2555 0-.1971-.108-.2485-.2965-.2485h-.4132v.504zm-.0377.1234h-.3806v.5178h-.132V13.988h.5486c.2948 0 .4286.1183.4286.3703 0 .2194-.1046.348-.3258.377l.3068.523h-.1439l-.3017-.5177m-.924-.1166c0-.3429-.1594-.528-.5058-.528-.3446 0-.5023.1851-.5023.528 0 .3446.1577.5298.5023.5298.3464 0 .5058-.1852.5058-.5298zm-.5058-.6566c.408 0 .6412.2024.6412.655 0 .4542-.2332.6565-.6412.6565-.4063 0-.6377-.2023-.6377-.6566 0-.4525.2314-.6549.6377-.6549zm-2.3571.0206l.3342 1.0508.3412-1.0508h.1166l.3394 1.0508.336-1.0508h.1303l-.408 1.2789h-.1165l-.343-1.0577-.341 1.0577h-.1183l-.4098-1.2789zm-1.392.1286v-.1286h1.0886v.1286h-.4766v1.1418h-.1355v-1.1418zm-.204-.1286v.1286h-.7046v.42h.6874v.127h-.6874v.4713h.7114v.1235h-.8468V13.988zm-2.0539 0l.7596 1.0475V13.988h.1303v1.2704h-.1235l-.7835-1.0784v1.0784h-.1303V13.988Z",
-    fortinet: "M0 9.785h6.788v4.454H0zm8.666-6.33h6.668v4.453H8.666zm0 12.637h6.668v4.454H8.666zm8.522-6.307H24v4.454h-6.812zM2.792 3.455C1.372 3.814.265 5.404 0 7.425v.506h6.788V3.454zM0 16.091v.554c.24 1.926 1.276 3.466 2.624 3.9h4.188v-4.454zm24-8.184v-.506c-.265-1.998-1.372-3.587-2.792-3.972h-4.02v4.454H24zM21.376 20.57c1.324-.458 2.36-1.974 2.624-3.9v-.554h-6.812v4.454Z",
-    microsoft: "M0 0h11.4v11.4H0V0zm12.6 0H24v11.4H12.6V0zM0 12.6h11.4V24H0V12.6zm12.6 0H24V24H12.6V12.6z",
-};
-
-const ORBIT_PARTNERS = [
-    { name: 'Apple',     mark: 'apple',     brand: '#B8BEC2', ink: '#07080A', ring: 0, phase: .00, k: .92,  fit: '42%' },
-    { name: 'Dell',      mark: 'dell',      brand: '#007DB8', ink: '#FFFFFF', ring: 0, phase: .25, k: 1.04, fit: '56%' },
-    { name: 'Lenovo',    mark: 'lenovo',    brand: '#E2231A', ink: '#FFFFFF', ring: 0, phase: .50, k: 1.06, fit: '66%' },
-    { name: 'HP',        mark: 'hp',        brand: '#0096D6', ink: '#FFFFFF', ring: 0, phase: .75, k: .95,  fit: '56%' },
-    { name: 'Cisco',     mark: 'cisco',     brand: '#1BA0D7', ink: '#FFFFFF', ring: 1, phase: .12, k: 1.08, fit: '62%' },
-    { name: 'Juniper',   mark: 'juniper',   brand: '#84B135', ink: '#07080A', ring: 1, phase: .62, k: 1.08, fit: '70%' },
-    { name: 'Fortinet',  mark: 'fortinet',  brand: '#EE3124', ink: '#FFFFFF', ring: 2, phase: .06, k: 1.00, fit: '56%' },
-    { name: 'Sophos',    mark: null,        brand: '#1B9DD9', ink: '#FFFFFF', ring: 2, phase: .40, k: 1.00, word: 'SOPHOS' },
-    { name: 'Microsoft', mark: 'microsoft', brand: '#3A4149', ink: '#FFFFFF', ring: 2, phase: .73, k: 1.04, fit: '46%' },
-];
-
-const ORBIT_CFG = {
-    tilt: 62, tiltMin: 16, tiltMax: 82,      // degrees from top-down; 0 = flat circle, 90 = edge on
-    persp: 3.4,                              // camera distance as a multiple of the outer radius
-    sunK: .46,                               // sun diameter as a fraction of the outer radius
-    planetK: .145, planetMin: 32, planetMax: 92,
-    pad: 20,                                 // breathing room at the top/right edges, px
-    padBottom: 104,                          // room kept clear for the scroll cue and legend, px
-    overlap: 150,                            // how far the system may tuck behind the copy scrim, px
-    bleed: 0,                                // px the outer orbit may run past the right edge
-    dragSpin: .0075,                         // radians of spin per px dragged horizontally
-    dragTilt: .12,                           // degrees of tilt per px dragged vertically
-    friction: .94,                           // inertia decay per frame
-    scrollSpin: .0022,                       // radians of spin per px of page scroll
-    chipRoom: 78,                            // px reserved either side for the satellite chips
-    chipMinS: .88, chipMaxS: 1.12,           // chips never shrink past this — text must stay legible
-    bob: 4,                                  // px of vertical float on each chip
-};
+/* Split so each word can be pulled into place independently — see the
+   gravitational-collapse reveal wired up in the Home component below. */
+const HERO_HEADLINE_WORDS = ['Where', 'Complexity', 'Collapses', 'Into', 'Clarity'];
 
 const Home = () => {
 
     const dynamicTypingRef = useRef(null);
+    const narrow = useNarrowViewport();
+    const heroHeadlineRef = useRef(null);
 
     const servicesCanvasRef = useRef(null);
     const aboutCanvasRef    = useRef(null);
     const whyCanvasRef      = useRef(null);
 
-    const orbitHeroRef    = useRef(null);
-    const orbitCopyRef    = useRef(null);
-    const orbitStageRef   = useRef(null);
-    const orbitSvgRef     = useRef(null);
-    const orbitLegendRef  = useRef(null);
-    const orbitCueRef     = useRef(null);
-    const navigate = useNavigate();
-
-    /* ── Partner orbit engine ──
-       Imperative by design: every planet, satellite and orbit ring is driven
-       from one requestAnimationFrame loop through a single project() call,
-       so nothing can drift out of sync the way independent CSS animations
-       eventually would. Built once on mount, torn down on unmount. */
+    /* Headline reveal — each word is pulled into place from a scattered,
+       blurred start, like matter converging under gravity before it settles
+       into the shape of a sentence. Matches the black hole behind it instead
+       of a generic fade-up. */
     useEffect(() => {
-        const hero  = orbitHeroRef.current;
-        const copy  = orbitCopyRef.current;
-        const stage = orbitStageRef.current;
-        const svg   = orbitSvgRef.current;
-        const legend = orbitLegendRef.current;
-        const cue   = orbitCueRef.current;
-        if (!hero || !copy || !stage || !svg) return;
+        const words = heroHeadlineRef.current?.querySelectorAll('.hero-word-collapse');
+        if (!words || !words.length) return;
+        const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (reduced) {
+            words.forEach((w) => { w.style.opacity = '1'; });
+            return;
+        }
 
-        const TAU = Math.PI * 2;
-        const DEG = Math.PI / 180;
-        const SVG_NS = 'http://www.w3.org/2000/svg';
-        const CFG = ORBIT_CFG;
-        const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-        let W = 0, H = 0, cx = 0, cy = 0, R = 0;
-        let spin = 0, vSpin = 0, tilt = CFG.tilt, scrollSpin = 0;
-        let time = 0, last = 0, paused = false, destroyed = false;
-        let rafId = null;
-
-        const created = []; // every DOM node this effect appends, for cleanup
-
-        const ringPaths = ORBIT_RINGS.map((ring) => {
-            const p = document.createElementNS(SVG_NS, 'path');
-            if (ring.dash) p.setAttribute('stroke-dasharray', '3 7');
-            svg.appendChild(p);
-            created.push(p);
-            return p;
+        words.forEach((w, i) => {
+            const angle = (i / words.length) * Math.PI * 2 + Math.random() * 0.8;
+            const dist = 46 + Math.random() * 34;
+            // anime.js's transform engine parses translateX/translateY/scale
+            // as separate function tokens — the translate(x, y) shorthand
+            // isn't recognized, so the words never actually animate back.
+            w.style.transform = `translateX(${Math.cos(angle) * dist}px) translateY(${Math.sin(angle) * dist}px) scale(1.7)`;
+            w.style.opacity = '0';
+            w.style.filter = 'blur(10px)';
         });
 
-        if (legend) {
-            ORBIT_RINGS.forEach((ring) => {
-                const row = document.createElement('div');
-                row.className = 'orbit-legend__row';
-                row.innerHTML = `<span class="orbit-legend__dash${ring.dash ? ' is-dashed' : ''}"></span>`;
-                row.appendChild(document.createTextNode(ring.label));
-                legend.appendChild(row);
-                created.push(row);
+        if (window.anime) {
+            window.anime({
+                targets: words,
+                translateX: 0,
+                translateY: 0,
+                scale: 1,
+                opacity: [0, 1],
+                filter: ['blur(10px)', 'blur(0px)'],
+                easing: 'easeOutExpo',
+                duration: 1100,
+                delay: window.anime.stagger(90, { start: 150 }),
+            });
+        } else {
+            words.forEach((w) => {
+                w.style.transition = 'transform 900ms cubic-bezier(.16,1,.3,1), opacity 700ms ease, filter 900ms ease';
+                w.style.transform = 'none';
+                w.style.opacity = '1';
+                w.style.filter = 'blur(0px)';
             });
         }
-
-        const pauseOn = (el) => {
-            const on  = () => { paused = true; };
-            const off = () => { paused = false; };
-            el.addEventListener('pointerenter', on);
-            el.addEventListener('pointerleave', off);
-            el.addEventListener('focus', on);
-            el.addEventListener('blur', off);
-            return () => {
-                el.removeEventListener('pointerenter', on);
-                el.removeEventListener('pointerleave', off);
-                el.removeEventListener('focus', on);
-                el.removeEventListener('blur', off);
-            };
-        };
-        const teardownFns = [];
-
-        const nodes = ORBIT_PARTNERS.map((p) => {
-            const a = document.createElement('a');
-            a.className = 'orbit-planet';
-            a.href = '#';
-            a.style.setProperty('--brand', p.brand);
-            a.style.setProperty('--mark', p.ink);
-            if (p.fit) a.style.setProperty('--fit', p.fit);
-            a.setAttribute('aria-label', `${p.name} — ${ORBIT_RINGS[p.ring].label.toLowerCase()}`);
-
-            if (p.mark && ORBIT_MARKS[p.mark]) {
-                const markSvg = document.createElementNS(SVG_NS, 'svg');
-                markSvg.setAttribute('viewBox', '0 0 24 24');
-                markSvg.setAttribute('aria-hidden', 'true');
-                const path = document.createElementNS(SVG_NS, 'path');
-                path.setAttribute('d', ORBIT_MARKS[p.mark]);
-                markSvg.appendChild(path);
-                a.appendChild(markSvg);
-            } else {
-                const word = document.createElement('span');
-                word.className = 'orbit-wordmark';
-                word.textContent = p.word || p.name;
-                a.appendChild(word);
-            }
-
-            const name = document.createElement('span');
-            name.className = 'orbit-planet__name';
-            name.textContent = p.name;
-            a.appendChild(name);
-
-            teardownFns.push(pauseOn(a));
-            stage.appendChild(a);
-            created.push(a);
-            return a;
-        });
-
-        const sats = ORBIT_SATELLITES.map((sat) => {
-            const a = document.createElement('a');
-            a.className = 'orbit-sat';
-            a.href = sat.href;
-            a.textContent = sat.label;
-            teardownFns.push(pauseOn(a));
-            stage.appendChild(a);
-            created.push(a);
-            return a;
-        });
-
-        function syncHeroHeight() {
-            const navEl = document.querySelector('.navbar-container');
-            const navH = navEl ? navEl.getBoundingClientRect().height : 0;
-            if (window.innerWidth >= 1000) {
-                // the navbar sits in normal flow (not fixed), so a plain 100svh
-                // hero runs that much past the bottom of the fold — pull it
-                // back in so the bottom-anchored legend/cue stay visible
-                hero.style.minHeight = `calc(100svh - ${navH}px)`;
-            } else {
-                // on narrow screens the system sits *below* the copy rather
-                // than beside it, so the hero needs to grow past 100svh to
-                // give it room — a fixed viewport-height cap here would
-                // force the orbit down to its size floor and into the copy
-                const copyH = copy.getBoundingClientRect().height;
-                hero.style.minHeight = `${Math.round(copyH + 520)}px`;
-            }
-        }
-
-        function measure() {
-            syncHeroHeight();
-            const rect = hero.getBoundingClientRect();
-            W = rect.width; H = rect.height;
-
-            const cosT = Math.cos(tilt * DEG);
-            const sinT = Math.sin(tilt * DEG);
-            const grow = CFG.persp / (CFG.persp - sinT);
-            const bite = CFG.planetK / 2 * grow;
-
-            const wide = W >= 1000;
-            const copyRect = copy.getBoundingClientRect();
-            let left, right, top, bottom;
-
-            if (wide) {
-                left   = (copyRect.right - rect.left) - CFG.overlap;
-                right  = W - CFG.pad + CFG.bleed;
-                top    = CFG.pad;
-                bottom = H - CFG.padBottom;
-            } else {
-                left   = CFG.pad;
-                right  = W - CFG.pad;
-                top    = (copyRect.bottom - rect.top) - 24;
-                bottom = H - CFG.padBottom;
-            }
-
-            cx = (left + right) / 2;
-            cy = (top + bottom) / 2;
-
-            const halfW = (right - left) / 2;
-            const halfH = (bottom - top) / 2;
-
-            R = Math.max(120, Math.min(
-                (halfW - CFG.chipRoom) / (grow + bite),
-                (halfH - 16) / (grow * cosT + bite)
-            ));
-
-            stage.style.setProperty('--cx', cx.toFixed(1) + 'px');
-            stage.style.setProperty('--cy', cy.toFixed(1) + 'px');
-            stage.style.setProperty('--sun', Math.round(R * CFG.sunK) + 'px');
-
-            nodes.forEach((el, i) => {
-                const d = Math.round(
-                    Math.min(CFG.planetMax, Math.max(CFG.planetMin, R * CFG.planetK * ORBIT_PARTNERS[i].k))
-                );
-                el.style.setProperty('--d', d + 'px');
-            });
-
-            drawOrbits();
-        }
-
-        function project(angle, radius) {
-            const cosT = Math.cos(tilt * DEG);
-            const sinT = Math.sin(tilt * DEG);
-            const px = Math.cos(angle) * radius;
-            const pz = Math.sin(angle) * radius;
-            const z  = pz * sinT;
-            const s  = CFG.persp * R / (CFG.persp * R - z);
-            return { x: px * s, y: pz * cosT * s, s, z };
-        }
-
-        function drawOrbits() {
-            const STEPS = 120;
-            ringPaths.forEach((path, i) => {
-                const radius = R * ORBIT_RINGS[i].r;
-                let d = '';
-                for (let j = 0; j <= STEPS; j++) {
-                    const pt = project((j / STEPS) * TAU, radius);
-                    d += (j ? 'L' : 'M') + (cx + pt.x).toFixed(1) + ' ' + (cy + pt.y).toFixed(1);
-                }
-                path.setAttribute('d', d + 'Z');
-            });
-        }
-
-        function frame(now) {
-            if (destroyed) return;
-            const dt = last ? Math.min((now - last) / 1000, .05) : 0;
-            last = now;
-
-            if (!paused && !still) time += dt;
-
-            if (Math.abs(vSpin) > 1e-5) {
-                spin += vSpin;
-                vSpin *= CFG.friction;
-                if (Math.abs(vSpin) <= 1e-5) vSpin = 0;
-            }
-
-            const zMax = R * Math.sin(tilt * DEG) || 1;
-
-            for (let i = 0; i < nodes.length; i++) {
-                const p = ORBIT_PARTNERS[i];
-                const ring = ORBIT_RINGS[p.ring];
-                const angle = (time / ring.period) * TAU + p.phase * TAU + spin + scrollSpin;
-                const pt = project(angle, R * ring.r);
-                nodes[i].style.transform = `translate3d(${pt.x.toFixed(1)}px,${pt.y.toFixed(1)}px,0) scale(${pt.s.toFixed(3)})`;
-                nodes[i].style.opacity = (.52 + .48 * ((pt.z / zMax) + 1) / 2).toFixed(3);
-                nodes[i].style.zIndex = String(100 + Math.round(pt.z));
-            }
-
-            const satRing = ORBIT_RINGS[ORBIT_SAT_RING];
-            for (let i = 0; i < sats.length; i++) {
-                const sat = ORBIT_SATELLITES[i];
-                const angle = (time / satRing.period) * TAU * (satRing.dir || 1) + sat.phase * TAU + spin + scrollSpin;
-                const pt = project(angle, R * satRing.r);
-                const s2 = Math.min(CFG.chipMaxS, Math.max(CFG.chipMinS, pt.s));
-                const bob = still ? 0 : Math.sin(time * .8 + i * 1.7) * CFG.bob;
-                sats[i].style.transform = `translate3d(${pt.x.toFixed(1)}px,${(pt.y + bob).toFixed(1)}px,0) scale(${s2.toFixed(3)})`;
-                sats[i].style.opacity = (.45 + .55 * ((pt.z / zMax) + 1) / 2).toFixed(3);
-                sats[i].style.zIndex = String(100 + Math.round(pt.z));
-            }
-
-            rafId = requestAnimationFrame(frame);
-        }
-
-        /* drag: horizontal spins (with inertia), vertical tilts the plane
-           (mouse only — touch keeps vertical drag as page scroll) */
-        let dragging = false, moved = 0, lastX = 0, lastY = 0, touch = false;
-
-        const onPointerDown = (e) => {
-            dragging = true;
-            moved = 0;
-            touch = e.pointerType === 'touch';
-            lastX = e.clientX; lastY = e.clientY;
-            vSpin = 0;
-            stage.classList.add('is-dragging');
-            stage.setPointerCapture(e.pointerId);
-        };
-        const onPointerMove = (e) => {
-            if (!dragging) return;
-            const dx = e.clientX - lastX;
-            const dy = e.clientY - lastY;
-            lastX = e.clientX; lastY = e.clientY;
-            moved += Math.abs(dx) + Math.abs(dy);
-
-            const d = dx * CFG.dragSpin;
-            spin += d;
-            vSpin = d;
-
-            if (!touch && Math.abs(dy) > 0) {
-                tilt = Math.min(CFG.tiltMax, Math.max(CFG.tiltMin, tilt + dy * CFG.dragTilt));
-                measure();
-            }
-        };
-        const endDrag = (e) => {
-            if (!dragging) return;
-            dragging = false;
-            stage.classList.remove('is-dragging');
-            if (e && e.pointerId != null && stage.hasPointerCapture(e.pointerId)) {
-                stage.releasePointerCapture(e.pointerId);
-            }
-        };
-        const onClickCapture = (e) => {
-            if (moved > 6) { e.preventDefault(); e.stopPropagation(); return; }
-            const satEl = e.target.closest('.orbit-sat');
-            if (satEl) {
-                e.preventDefault();
-                navigate(satEl.getAttribute('href'));
-                return;
-            }
-            if (e.target.closest('.orbit-planet')) e.preventDefault();
-        };
-        const onKeyDown = (e) => {
-            const step = .12;
-            if (e.key === 'ArrowLeft')  { spin -= step; e.preventDefault(); }
-            if (e.key === 'ArrowRight') { spin += step; e.preventDefault(); }
-            if (e.key === 'ArrowUp')    { tilt = Math.max(CFG.tiltMin, tilt - 3); measure(); e.preventDefault(); }
-            if (e.key === 'ArrowDown')  { tilt = Math.min(CFG.tiltMax, tilt + 3); measure(); e.preventDefault(); }
-        };
-
-        stage.addEventListener('pointerdown', onPointerDown);
-        stage.addEventListener('pointermove', onPointerMove);
-        stage.addEventListener('pointerup', endDrag);
-        stage.addEventListener('pointercancel', endDrag);
-        stage.addEventListener('click', onClickCapture, true);
-        stage.addEventListener('keydown', onKeyDown);
-
-        /* scroll: the system keeps turning as the page moves, and the cue
-           fades once the visitor has actually started scrolling */
-        let ticking = false;
-        const onScroll = () => {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(() => {
-                const y = window.scrollY || 0;
-                scrollSpin = still ? 0 : y * CFG.scrollSpin;
-                cue?.classList.toggle('is-hidden', y > 40);
-                ticking = false;
-            });
-        };
-        window.addEventListener('scroll', onScroll, { passive: true });
-        onScroll();
-
-        const onCueClick = () => {
-            hero.nextElementSibling?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
-        };
-        cue?.addEventListener('click', onCueClick);
-
-        let resizeTimer;
-        const onResize = () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(measure, 120); };
-        window.addEventListener('resize', onResize);
-
-        const onVisibility = () => { paused = document.hidden; };
-        document.addEventListener('visibilitychange', onVisibility);
-
-        // the copy column's height can shift after mount — web fonts
-        // swapping in, or (on narrow screens) the stage sitting below it —
-        // so re-fit whenever its box actually changes, not just on resize
-        const copyObserver = new ResizeObserver(() => measure());
-        copyObserver.observe(copy);
-
-        measure();
-        rafId = requestAnimationFrame(frame);
-
-        return () => {
-            destroyed = true;
-            if (rafId) cancelAnimationFrame(rafId);
-            clearTimeout(resizeTimer);
-            copyObserver.disconnect();
-            stage.removeEventListener('pointerdown', onPointerDown);
-            stage.removeEventListener('pointermove', onPointerMove);
-            stage.removeEventListener('pointerup', endDrag);
-            stage.removeEventListener('pointercancel', endDrag);
-            stage.removeEventListener('click', onClickCapture, true);
-            stage.removeEventListener('keydown', onKeyDown);
-            window.removeEventListener('scroll', onScroll);
-            window.removeEventListener('resize', onResize);
-            document.removeEventListener('visibilitychange', onVisibility);
-            cue?.removeEventListener('click', onCueClick);
-            teardownFns.forEach((fn) => fn());
-            created.forEach((el) => el.remove());
-        };
-    }, [navigate]);
+    }, []);
 
     /* Neural networks */
     useEffect(() => {
@@ -643,84 +265,68 @@ const Home = () => {
             {/* ══════════════════════════════
                 Hero
             ══════════════════════════════ */}
-            <section className="hero-section hero-section--orbit" ref={orbitHeroRef}>
-                <div className="orbit-starfield" aria-hidden="true">
-                    {ORBIT_STARS.map((s, i) => (
-                        <span key={i} className="orbit-star" style={{
-                            left: `${s.left}%`, top: `${s.top}%`,
-                            width: `${s.size}px`, height: `${s.size}px`,
-                            animationDelay: `${s.delay}s`,
-                        }}></span>
-                    ))}
-                </div>
+            <section className="relative w-full" style={{ minHeight: '100svh' }}>
+                <BlackHoleHeroSection
+                    focus={narrow ? [0.5, 0.76] : [0.74, 0.46]}
+                    scrim={narrow ? 'top' : 'left'}
+                    scrimStrength={0.92}
+                    distance={24}
+                    elevation={narrow ? -7 : -5.5}
+                    fov={narrow ? 58 : 42}
+                    steps={narrow ? 200 : 300}
+                    resolution={narrow ? 0.6 : 0.7}
+                    hotColor="#EAF4FF"
+                    midColor="#38BDF8"
+                    coolColor="#054494"
+                >
+                    <div className={`container mx-auto px-6 relative flex ${narrow ? 'items-start pt-24' : 'items-center'}`} style={{ minHeight: '100svh', zIndex: 10 }}>
+                        <div style={{ maxWidth: '40rem' }}>
+                            <div style={{ display:'inline-flex', alignItems:'center', gap:'8px', padding:'5px 16px', borderRadius:'99px', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.14)', marginBottom:'24px' }}>
+                                <span style={{ width:'6px', height:'6px', borderRadius:'50%', background:'#F4F5F7', animation:'pulseDot 2s infinite' }}></span>
+                                <span style={{ color:'#9AA3AF', fontSize:'11px', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.12em', fontFamily:'DM Sans,sans-serif' }}>Trusted IT Partner 2025</span>
+                            </div>
 
-                {/* Planets, satellite chips and orbit-ring paths are built and
-                    positioned imperatively (see the orbit-engine effect above) —
-                    every frame comes from one project() call so nothing drifts
-                    out of sync the way independent CSS animations would. */}
-                <div className="orbit-stage" ref={orbitStageRef} tabIndex={0} role="group"
-                    aria-label="Partner system — drag to spin, arrow keys to rotate">
-                    <svg className="orbit-svg" ref={orbitSvgRef} aria-hidden="true"></svg>
-                    <div className="orbit-sun" aria-hidden="true">
-                        <span className="orbit-sun__corona"></span>
-                        <span className="orbit-sun__core"></span>
-                        <span className="orbit-sun__mark">StromexAI</span>
-                    </div>
-                </div>
+                            <h1 ref={heroHeadlineRef} className="text-3xl sm:text-5xl md:text-6xl hero-glow-text" style={{ fontFamily:'Outfit,sans-serif', fontWeight:800, letterSpacing:'-0.03em', color:'#F4F5F7', lineHeight:1.05, marginBottom:'24px', maxWidth:'19ch' }}>
+                                {HERO_HEADLINE_WORDS.map((word, i) => (
+                                    <span key={i} className="hero-word-collapse" style={{ display:'inline-block', willChange:'transform, filter, opacity', marginRight:'0.26em' }}>
+                                        {word}
+                                    </span>
+                                ))}
+                            </h1>
 
-                <div className="container mx-auto px-6 relative" style={{ zIndex:200, pointerEvents:'none' }}>
-                    <div className="orbit-copy" ref={orbitCopyRef}>
-                        <div style={{ display:'inline-flex', alignItems:'center', gap:'8px', padding:'5px 16px', borderRadius:'99px', background:'rgba(255,255,255,0.06)', border:'1px solid var(--line)', marginBottom:'24px' }}>
-                            <span style={{ width:'6px', height:'6px', borderRadius:'50%', background:'var(--paper)', animation:'pulseDot 2s infinite' }}></span>
-                            <span style={{ color:'var(--muted)', fontSize:'11px', fontWeight:700, textTransform:'uppercase', letterSpacing:'0.12em', fontFamily:'DM Sans,sans-serif' }}>Trusted IT Partner 2025</span>
-                        </div>
+                            <p className="reveal" style={{ color:'#9AA3AF', fontSize:'1.1rem', lineHeight:1.7, maxWidth:'44ch', margin:'0 0 36px' }}>
+                                Transforming businesses with next-generation AI, cloud infrastructure, and enterprise-grade security solutions.
+                            </p>
 
-                        <h1 className="text-3xl sm:text-5xl md:text-6xl" style={{ fontFamily:'Outfit,sans-serif', fontWeight:800, letterSpacing:'-0.03em', color:'var(--paper)', lineHeight:1.05, marginBottom:'24px', maxWidth:'17ch' }}>
-                            Empowering Innovations Through AI‑Driven Tech Solutions
-                        </h1>
+                            <div className="flex flex-wrap reveal" style={{ gap:'14px' }}>
+                                <Link to="/solutions" className="hero-btn-primary">
+                                    <i className="fas fa-rocket" style={{ fontSize:'14px' }}></i> Explore services
+                                </Link>
+                                <Link to="/contact" className="hero-btn-secondary">
+                                    <i className="fas fa-paper-plane" style={{ fontSize:'14px' }}></i> Get in touch
+                                </Link>
+                            </div>
 
-                        <p className="reveal" style={{ color:'var(--muted)', fontSize:'1.1rem', lineHeight:1.7, maxWidth:'44ch', margin:'0 0 36px' }}>
-                            Transforming businesses with next-generation AI, cloud infrastructure, and enterprise-grade security solutions.
-                        </p>
-
-                        <div className="flex flex-wrap reveal" style={{ gap:'14px' }}>
-                            <Link to="/solutions" className="hero-btn-primary">
-                                <i className="fas fa-rocket" style={{ fontSize:'14px' }}></i> Explore services
-                            </Link>
-                            <Link to="/contact" className="hero-btn-secondary">
-                                <i className="fas fa-paper-plane" style={{ fontSize:'14px' }}></i> Get in touch
-                            </Link>
-                        </div>
-
-                        <p className="orbit-hint reveal">Drag the system to spin it</p>
-
-                        <div className="reveal" style={{ marginTop:'32px', display:'flex', alignItems:'center', gap:'28px', flexWrap:'wrap' }}>
-                            {[
-                                { icon:'fa-users',          val:'250+', label:'Happy Clients'    },
-                                { icon:'fa-server',         val:'99%',  label:'Uptime SLA'       },
-                                { icon:'fa-globe',          val:'15+',  label:'Years Experience' },
-                            ].map((item, i) => (
-                                <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                                    <div style={{ width:'34px', height:'34px', borderRadius:'10px', background:'rgba(255,255,255,0.07)', border:'1px solid var(--line)', display:'flex', alignItems:'center', justifyContent:'center', color:'var(--paper)', fontSize:'13px' }}>
-                                        <i className={`fas ${item.icon}`}></i>
+                            <div className="reveal" style={{ marginTop:'44px', display:'flex', alignItems:'center', gap:'28px', flexWrap:'wrap' }}>
+                                {[
+                                    { icon:'fa-users',          val:'250+', label:'Happy Clients'    },
+                                    { icon:'fa-server',         val:'99%',  label:'Uptime SLA'       },
+                                    { icon:'fa-globe',          val:'15+',  label:'Years Experience' },
+                                ].map((item, i) => (
+                                    <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                                        <div style={{ width:'34px', height:'34px', borderRadius:'10px', background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', display:'flex', alignItems:'center', justifyContent:'center', color:'#F4F5F7', fontSize:'13px' }}>
+                                            <i className={`fas ${item.icon}`}></i>
+                                        </div>
+                                        <div style={{ textAlign:'left' }}>
+                                            <div style={{ color:'#F4F5F7', fontWeight:800, fontSize:'1.05rem', fontFamily:'Outfit,sans-serif', lineHeight:1 }}>{item.val}</div>
+                                            <div style={{ color:'#9AA3AF', fontSize:'10px', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.1em' }}>{item.label}</div>
+                                        </div>
                                     </div>
-                                    <div style={{ textAlign:'left' }}>
-                                        <div style={{ color:'var(--paper)', fontWeight:800, fontSize:'1.05rem', fontFamily:'Outfit,sans-serif', lineHeight:1 }}>{item.val}</div>
-                                        <div style={{ color:'var(--muted)', fontSize:'10px', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.1em' }}>{item.label}</div>
-                                    </div>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
                         </div>
                     </div>
-                </div>
-
-                <div className="orbit-legend" ref={orbitLegendRef} aria-hidden="true"></div>
-
-                <button className="orbit-scroll-cue" ref={orbitCueRef} type="button">
-                    <span>Scroll</span>
-                    <span className="orbit-scroll-cue__track"><span className="orbit-scroll-cue__dot"></span></span>
-                </button>
-
+                </BlackHoleHeroSection>
                 <div style={{ position:'absolute', bottom:0, left:0, right:0, height:'70px', background:'linear-gradient(to top,#021840,transparent)', zIndex:9 }}></div>
             </section>
 

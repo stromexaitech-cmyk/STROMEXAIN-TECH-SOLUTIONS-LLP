@@ -15,6 +15,7 @@ import Infrastructure from './pages/Infrastructure';
 import MDM from './pages/MDM';
 import NetworkSecurity from './pages/NetworkSecurity';
 import Solutions from './pages/Solutions';
+import BlackHoleHeroSectionDemo from './components/ui/blackhole-hero-demo';
 
 // CRM
 import CRMLayout from './crm/components/CRMLayout';
@@ -88,7 +89,8 @@ function App() {
         <Route path="/mdm" element={<><Navbar /><main><MDM /></main><Footer /></>} />
         <Route path="/network-security" element={<><Navbar /><main><NetworkSecurity /></main><Footer /></>} />
         <Route path="/solutions" element={<><Navbar /><main><Solutions /></main><Footer /></>} />
-        
+        <Route path="/blackhole-demo" element={<BlackHoleHeroSectionDemo />} />
+
         {/* CRM Routes */}
         <Route path="/crm/login" element={<Login />} />
         <Route element={<PrivateRoute />}>
